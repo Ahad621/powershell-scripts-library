@@ -1,73 +1,88 @@
 ####### Detection script ########
-## Detection Script to check if Firefox is installed in any location or if any leftover files remains
+## Detection Script to check if Firefox is installed in any location or if any leftover files remain
 ## Author: Ahad Alam
-## Date: 10-April-2025
+## Date Created: 10-April-2025
+## Date Modified: 15-April-2025
 
 
 $Detected = $false
 $LocalUsers = (Get-ChildItem -Path "C:\Users" -Directory).Name
 
-# Check Program Files
-if (Test-Path "${env:ProgramFiles(x86)}\Mozilla Firefox\uninstall\helper.exe") {
-    Write-Output "Firefox detected in ProgramFiles (x86)"
-    $Detected = $true
-}
-if (Test-Path "${env:ProgramFiles}\Mozilla Firefox\uninstall\helper.exe") {
-    Write-Output "Firefox detected in ProgramFiles"
-    $Detected = $true
+$Logs = @()
+
+# Function to check if Firefox is installed in a given path
+function Check-Firefox {
+    param ([string]$Path)
+    if (Test-Path "$Path\uninstall\helper.exe") {
+        $Logs += "Firefox detected at: $Path"
+        $script:Detected = $true
+    }
 }
 
-# Check user-specific locations
+# Check common install locations
+Check-Firefox "${env:ProgramFiles(x86)}\Mozilla Firefox"
+Check-Firefox "${env:ProgramFiles}\Mozilla Firefox"
+
+# Check each user’s local AppData
 foreach ($LocalUser in $LocalUsers) {
     $UserPath = "C:\Users\$LocalUser"
+    $LocalInstall = "$UserPath\AppData\Local\Mozilla Firefox"
+    $RoamingInstall = "$UserPath\AppData\Roaming\Mozilla Firefox"
 
-    if (Test-Path "$UserPath\AppData\Local\Mozilla Firefox\uninstall\helper.exe") {
-        Write-Output "Firefox detected in $UserPath\AppData\Local"
-        $Detected = $true
-    }
+    Check-Firefox $LocalInstall
+    Check-Firefox $RoamingInstall
 
     if (Test-Path "$UserPath\AppData\Local\Mozilla") {
-        Write-Output "Mozilla folder detected in $UserPath\AppData\Local"
+        $Logs += "Mozilla folder found in AppData\Local for $LocalUser"
         $Detected = $true
     }
 
     if (Test-Path "$UserPath\AppData\LocalLow\Mozilla") {
-        Write-Output "Mozilla folder detected in $UserPath\AppData\LocalLow"
+        $Logs += "Mozilla folder found in AppData\LocalLow for $LocalUser"
         $Detected = $true
     }
 
     if (Test-Path "$UserPath\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Firefox.lnk") {
-        Write-Output "Firefox shortcut detected in Start Menu for $LocalUser"
+        $Logs += "Firefox shortcut found in Start Menu for $LocalUser"
         $Detected = $true
     }
 
     if (Test-Path "$UserPath\Desktop\firefox.lnk") {
-        Write-Output "Firefox shortcut detected on desktop for $LocalUser"
+        $Logs += "Firefox shortcut found on desktop for $LocalUser"
         $Detected = $true
     }
 }
 
-# Check common registry keys and global Start Menu shortcut
+# Check if Firefox is installed via Microsoft Store
+$StoreApp = Get-AppxPackage -Name "Mozilla.Firefox*"  # Look for any installed version of Firefox
+if ($StoreApp) {
+    $Logs += "Firefox detected via Microsoft Store"
+    $Detected = $true
+}
+
+# Check registry entries and global shortcut
 $pathsToCheck = @(
+'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Firefox.lnk',
 'HKLM:\Software\Mozilla',
-'HKLM:\SOFTWARE\mozilla.org',
-'HKLM:\SOFTWARE\MozillaPlugins',
-'HKLM:\SOFTWARE\WOW6432Node\Mozilla',
-'HKLM:\SOFTWARE\WOW6432Node\mozilla.org',
-'HKLM:\SOFTWARE\WOW6432Node\MozillaPlugins',
-'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Firefox.lnk'
+'HKLM:\Software\mozilla.org',
+'HKLM:\Software\MozillaPlugins',
+'HKLM:\Software\WOW6432Node\Mozilla',
+'HKLM:\Software\WOW6432Node\mozilla.org',
+'HKLM:\Software\WOW6432Node\MozillaPlugins'
 )
 
 foreach ($path in $pathsToCheck) {
     if (Test-Path $path) {
-        Write-Output "Firefox-related registry key or shortcut detected: $path"
+        $Logs += "Detected Firefox-related entry: $path"
         $Detected = $true
     }
 }
 
-# Final exit based on detection
+# Final exit
 if ($Detected) {
+    Write-Output -InputObject ($Logs -join ', ')
     exit 1
 } else {
+    Write-Output "Firefox is not Detected."
     exit 0
 }
